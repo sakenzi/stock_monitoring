@@ -1,3 +1,5 @@
+require 'active_record'
+
 class StockData <ActiveRecord::Base
     belongs_to :stock
 

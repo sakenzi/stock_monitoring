@@ -1,0 +1,8 @@
+:concurrency: 5
+:redis:
+  :url: redis://localhost:6379/0
+:schedule:
+  parser_job:
+    cron: "*/2 * * * *"
+    class: "ParserWorker"
+    queue: default
