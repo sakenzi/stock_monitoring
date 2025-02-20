@@ -15,14 +15,23 @@ wait = Selenium::WebDriver::Wait.new(timeout: 12)
 def parse_stocks(driver, all_stocks)
     rows = driver.find_elements(xpath: '//*[@id="finfin-local-plugin-quote-table-table-table"]/tbody/tr')
 
-    rows.each_with_index do |row, index|
+    rows.each do |row|
         begin
-            stock_element = row.find_element(xpath: "./td[1]/a") 
-            stock_name = stock_element.text.strip
+            stock_name = row.find_element(xpath: "./td[1]/a").text.strip rescue ""
+            last_price = row.find_element(xpath: "./td[2]/span[2]").text.strip rescue ""
+            change_price = row.find_element(xpath: "./td[3]").text.strip rescue ""
+            first_price = row.find_element(xpath: "./td[4]").text.strip rescue ""
+            max_price = row.find_element(xpath: "./td[5]").text.strip rescue ""
+            min_price = row.find_element(xpath: "./td[6]").text.strip rescue ""
+            close_price = row.find_element(xpath: "./td[7]").text.strip rescue ""
+            quantity_selled = row.find_element(xpath: "./td[8]").text.strip rescue ""
+            time_update = row.find_element(xpath: "./td[9]").text.strip rescue ""
 
-            unless stock_name.empty? || all_stocks.include?(stock_name)
-                all_stocks << stock_name
-                puts stock_name
+            data = [stock_name, last_price, change_price, first_price, max_price, min_price, close_price, quantity_selled, time_update].join(", ")
+
+            unless stock_name.empty? || all_stocks.include?(data)
+                all_stocks << data
+                puts data
             end
         rescue Selenium::WebDriver::Error::NoSuchElementError
             next
