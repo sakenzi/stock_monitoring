@@ -16,127 +16,112 @@ options.add_argument('--disable-dev-shm-usage')
 driver = Selenium::WebDriver.for :chrome, options: options
 driver.navigate.to 'https://www.finam.ru/quotes/stocks/russia/'
 
-wait = Selenium::WebDriver::Wait.new(timeout: 4)
+wait = Selenium::WebDriver::Wait.new(timeout: 20)
 
 def parse_decimal(value)
-    return nil if value.nil? || value.strip.empty?
-
-    value.gsub(/[^\d,.-]/, '').tr(',', '.').to_f
+  return nil if value.nil? || value.strip.empty?
+  value.gsub(/[^\d,.-]/, '').tr(',', '.').to_f
 end
 
-def parse_stocks(driver, all_stocks)
+def safe_text(element, xpath)
+  element.find_element(xpath: xpath).text.strip rescue nil
+end
+
+def hide_interfering_elements(driver)
+  interfering_elements = driver.find_elements(css: "a[data-part='link']")
+  interfering_elements.each do |el|
+    driver.execute_script("arguments[0].style.display='none';", el)
+  end
+end
+
+def load_all_rows(driver)
+  last_row_count = 0
+  loop do
     rows = driver.find_elements(xpath: '//*[@id="finfin-local-plugin-quote-table-table-table"]/tbody/tr')
-  
-    rows.each do |row|
-        begin
-            stock_element = row.find_element(xpath: "./td[1]/a")
-            stock_name = stock_element.text.strip
-  
-            price = row.find_element(xpath: "./td[2]/span[2]").text.strip rescue nil
-            change = row.find_element(xpath: "./td[3]").text.strip rescue nil
-            first_price = row.find_element(xpath: "./td[4]").text.strip rescue nil
-            max_price = row.find_element(xpath: "./td[5]").text.strip rescue nil
-            min_price = row.find_element(xpath: "./td[6]").text.strip rescue nil
-            close_price = row.find_element(xpath: "./td[7]").text.strip rescue nil
-            quantity = row.find_element(xpath: "./td[8]").text.strip rescue nil
+    current_count = rows.size
 
-            price = parse_decimal(price)
-            change = parse_decimal(change)
-            first_price = parse_decimal(first_price)
-            max_price = parse_decimal(max_price)
-            min_price = parse_decimal(min_price)
-            close_price = parse_decimal(close_price)
-            quantity = quantity.nil? ? nil : quantity.gsub(/\D/, '').to_i
-        
-            time_update = Time.now
-  
-            next if stock_name.empty?
-  
-            stock = Stock.find_or_create_by(stock_name: stock_name)
-  
-            StockData.create(
-                stock_id: stock.id,
-                last_price_deal: price,
-                changed_price: change,
-                first_price: first_price,
-                max_price: max_price,
-                min_price: min_price,
-                close_price: close_price,
-                quantity_selled: quantity,
-                time_update: time_update
-            )
-  
-            unless all_stocks.include?(stock_name)
-                all_stocks << stock_name
-                puts "Добавлена акция: #{stock_name}, цена: #{price}"
-            end
-        rescue Selenium::WebDriver::Error::NoSuchElementError
-            next
-        end
-    end
-end
-
-def slow_scroll(driver)
-    last_height = driver.execute_script("return document.body.scrollHeight")
-  
-    loop do
-        prev_rows = driver.find_elements(xpath: '//*[@id="finfin-local-plugin-quote-table-table-table"]/tbody/tr').size
-
-        10.times do
-            driver.execute_script("window.scrollBy(0, 50);")
-            sleep 0.1
-        end
-  
-        sleep 2 
-  
-        new_rows = driver.find_elements(xpath: '//*[@id="finfin-local-plugin-quote-table-table-table"]/tbody/tr').size
-
-        break if new_rows == prev_rows
-  
-        last_height = driver.execute_script("return document.body.scrollHeight")
-    end
-end
-  
-def scroll_and_load(driver, wait)
-    all_stocks = []
-  
-    loop do
-        parse_stocks(driver, all_stocks) 
-        slow_scroll(driver) 
-  
-        begin
-            load_more_button = wait.until {
-                driver.find_element(xpath: '//*[@id="finfin-local-plugin-quote-table-table-more-container"]/button')
-            }
-            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", load_more_button)
-            sleep 3
-            driver.execute_script("arguments[0].click();", load_more_button)
-            sleep 2
-        rescue Selenium::WebDriver::Error::TimeoutError
-            puts "Кнопка 'Показать еще' больше не найдена. Завершаем скроллинг."
-            break
-        end
-    end
-  
-    parse_stocks(driver, all_stocks) 
-    puts "Парсинг завершен!"
-end  
-  
-at_exit do
     begin
-        driver.close
-        driver.quit
-    rescue Selenium::WebDriver::Error::WebDriverError
-        puts "Браузер уже закрыт."
+      load_more_button = driver.find_element(xpath: '//*[@id="finfin-local-plugin-quote-table-table-more-container"]/button')
+      if load_more_button.displayed?
+        hide_interfering_elements(driver)
+        driver.execute_script("arguments[0].scrollIntoView(true);", load_more_button)
+        sleep 1
+        driver.execute_script("arguments[0].click();", load_more_button)
+        sleep 3
+      end
+    rescue Selenium::WebDriver::Error::NoSuchElementError
     end
 
-    if Gem.win_platform?
-        system("taskkill /IM chrome.exe /F >nul 2>&1")
-        system("taskkill /IM chromedriver.exe /F >nul 2>&1")
-    end
+    driver.execute_script("window.scrollBy(0, 300);")
+    sleep 1
+
+    new_rows = driver.find_elements(xpath: '//*[@id="finfin-local-plugin-quote-table-table-table"]/tbody/tr')
+    break if new_rows.size <= current_count && current_count == last_row_count
+
+    last_row_count = current_count
+  end
+  sleep 5
 end
-  
-scroll_and_load(driver, wait)
-puts "\nПарсинг завершен!"
+
+def parse_stocks(driver)
+  stocks_data = []
+  rows = driver.find_elements(xpath: '//*[@id="finfin-local-plugin-quote-table-table-table"]/tbody/tr')
+
+  rows.each do |row|
+    begin
+      stock_name = safe_text(row, "./td[1]/a")
+      next if stock_name.nil? || stock_name.empty?
+
+      price_text       = safe_text(row, "./td[2]/span[2]")
+      change_text      = safe_text(row, "./td[3]")
+      first_price_text = safe_text(row, "./td[4]")
+      max_price_text   = safe_text(row, "./td[5]")
+      min_price_text   = safe_text(row, "./td[6]")
+      close_price_text = safe_text(row, "./td[7]")
+      quantity_text    = safe_text(row, "./td[8]")
+
+      price       = parse_decimal(price_text)
+      change      = parse_decimal(change_text)
+      first_price = parse_decimal(first_price_text)
+      max_price   = parse_decimal(max_price_text)
+      min_price   = parse_decimal(min_price_text)
+      close_price = parse_decimal(close_price_text)
+      quantity    = quantity_text.nil? ? nil : quantity_text.gsub(/\D/, '').to_i
+
+      stock = Stock.find_or_create_by(stock_name: stock_name)
+      StockData.create(
+        stock_id: stock.id,
+        last_price_deal: price,
+        changed_price: change,
+        first_price: first_price,
+        max_price: max_price,
+        min_price: min_price,
+        close_price: close_price,
+        quantity_selled: quantity,
+        time_update: Time.now
+      )
+
+      stocks_data << {
+        stock_name: stock_name,
+        price: price,
+        change: change,
+        first_price: first_price,
+        max_price: max_price,
+        min_price: min_price,
+        close_price: close_price,
+        quantity: quantity
+      }
+    rescue Selenium::WebDriver::Error::NoSuchElementError
+      next
+    end
+  end
+
+  stocks_data
+end
+
+load_all_rows(driver)
+stocks_data = parse_stocks(driver)
 driver.quit
-system("taskkill /IM chrome.exe /F")
+
+puts "Полученные данные:"
+puts stocks_data.inspect

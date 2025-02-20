@@ -8,7 +8,7 @@ class CreateStockData < ActiveRecord::Migration[8.0]
       t.decimal :max_price, precision: 10, scale: 2
       t.decimal :min_price, precision: 10, scale: 2
       t.decimal :close_price, precision: 10, scale: 2
-      t.integer :quantity_selled, null: false, default: 0
+      t.bigint :quantity_selled, null: false, default: 0
       t.datetime :time_update, null: false
 
       t.timestamps

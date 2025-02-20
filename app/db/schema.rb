@@ -22,7 +22,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_02_19_185010) do
     t.decimal "max_price", precision: 10, scale: 2
     t.decimal "min_price", precision: 10, scale: 2
     t.decimal "close_price", precision: 10, scale: 2
-    t.integer "quantity_selled", default: 0, null: false
+    t.bigint "quantity_selled", default: 0, null: false
     t.datetime "time_update", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
