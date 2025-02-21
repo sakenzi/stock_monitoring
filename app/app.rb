@@ -1,7 +1,13 @@
 require 'sinatra'
 require 'sinatra/activerecord'
-require 'sidekiq'
-require_relative 'workers/parser_workers'
+require 'sidekiq-cron'
+require 'yaml'
+require_relative 'routes/sidekiq_controller'
+
+config = YAML.load_file('sidekiq.yml')
+config = config.deep_transform_keys(&:to_s) if config.is_a?(Hash) && config.respond_to?(:deep_transform_keys)
+
+Sidekiq::Cron::Job.load_from_hash(config["schedule"])
 
 set :database_file, File.expand_path('database.yml', __dir__)
 
@@ -12,10 +18,7 @@ class MyApp < Sinatra::Base
     "Stock Monitoring Service is running!"
   end
 
-  get '/start_parser' do
-    ParserWorker.perform_async
-    "Парсер запущен!"
-  end
-
-  run! if app_file == $0
+  use SidekiqController
 end
+
+run MyApp if __FILE__ == $0
