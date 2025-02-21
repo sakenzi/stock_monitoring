@@ -10,6 +10,7 @@ class SidekiqController < Sinatra::Base
 
   get '/start_parser' do
     begin
+      status 200
       ParserWorker.perform_async
       json(message: 'Парсер запущен!')
     rescue => e

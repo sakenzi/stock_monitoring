@@ -2,6 +2,7 @@ require './app'
 require 'tzinfo'
 require 'sidekiq/web'
 require 'dotenv/load'
+require_relative 'routes/stock_controller'
 
 TZInfo::DataSource.set(:ruby)
 Sidekiq.configure_server do |config|
@@ -18,4 +19,5 @@ map '/sidekiq' do
   run Sidekiq::Web
 end
 
+run StockController
 run MyApp

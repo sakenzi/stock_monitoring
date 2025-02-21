@@ -78,7 +78,7 @@ module StockParser
         quantity    = quantity_text.nil? ? nil : quantity_text.gsub(/\D/, '').to_i
 
         stock = Stock.find_or_create_by(stock_name: stock_name)
-        StockData.create(
+        StockDatum.create(
           stock_id: stock.id,
           last_price_deal: price,
           changed_price: change,
