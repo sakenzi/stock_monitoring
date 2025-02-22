@@ -4,7 +4,6 @@ class CreateStocks < ActiveRecord::Migration[8.0]
       t.string :stock_name, null: false
       t.timestamps
     end
-
     add_index :stocks, :stock_name, unique: true
   end
 end

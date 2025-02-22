@@ -10,12 +10,20 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_02_19_185010) do
+ActiveRecord::Schema[8.0].define(version: 2025_02_22_080518) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
+  create_table "stock_countries", force: :cascade do |t|
+    t.string "country_name", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["country_name"], name: "index_stock_countries_on_country_name", unique: true
+  end
+
   create_table "stock_data", force: :cascade do |t|
     t.bigint "stock_id", null: false
+    t.bigint "stock_country_id", null: false
     t.decimal "last_price_deal", precision: 10, scale: 2, null: false
     t.decimal "changed_price", precision: 10, scale: 2
     t.decimal "first_price", precision: 10, scale: 2
@@ -26,6 +34,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_02_19_185010) do
     t.datetime "time_update", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.index ["stock_country_id"], name: "index_stock_data_on_stock_country_id"
     t.index ["stock_id"], name: "index_stock_data_on_stock_id"
   end
 
@@ -36,5 +45,6 @@ ActiveRecord::Schema[8.0].define(version: 2025_02_19_185010) do
     t.index ["stock_name"], name: "index_stocks_on_stock_name", unique: true
   end
 
+  add_foreign_key "stock_data", "stock_countries"
   add_foreign_key "stock_data", "stocks"
 end

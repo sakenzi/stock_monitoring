@@ -4,9 +4,19 @@ require 'pg'
 
 require_relative '../models/stock'
 require_relative '../models/stock_data'
+require_relative '../models/stock_country'
 require_relative '../config/environment'
 
 module StockParser
+  STOCK_URLS = {
+    'https://www.finam.ru/quotes/stocks/russia/' => 'Russia',
+    'https://www.finam.ru/quotes/stocks/foreign/' => 'Foreign',
+    'https://www.finam.ru/quotes/stocks/spbex/' => 'SPB Exchange',
+    'https://www.finam.ru/quotes/stocks/usa/' => 'USA',
+    'https://www.finam.ru/quotes/stocks/germany/' => 'Germany',
+    'https://www.finam.ru/quotes/stocks/hong-kong/' => 'Hong Kong'
+  }.freeze
+
   def self.parse_decimal(value)
     return nil if value.nil? || value.strip.empty?
     value.gsub(/[^\d,.-]/, '').tr(',', '.').to_f
@@ -28,6 +38,7 @@ module StockParser
     loop do
       rows = driver.find_elements(xpath: '//*[@id="finfin-local-plugin-quote-table-table-table"]/tbody/tr')
       current_count = rows.size
+      puts "Найдено строк: #{current_count}"
 
       begin
         load_more_button = driver.find_element(xpath: '//*[@id="finfin-local-plugin-quote-table-table-more-container"]/button')
@@ -52,13 +63,17 @@ module StockParser
     sleep 5
   end
 
-  def self.parse_stocks(driver)
+  def self.parse_stocks(driver, country_name)
     stocks_data = []
     rows = driver.find_elements(xpath: '//*[@id="finfin-local-plugin-quote-table-table-table"]/tbody/tr')
+
+    country = StockCountry.find_or_create_by!(country_name: country_name)
+    puts "Страна создана/найдена: #{country.country_name}, ID: #{country.id}"
 
     rows.each do |row|
       begin
         stock_name = safe_text(row, "./td[1]/a")
+        puts "Stock name: #{stock_name}"
         next if stock_name.nil? || stock_name.empty?
 
         price_text       = safe_text(row, "./td[2]/span[2]")
@@ -75,17 +90,21 @@ module StockParser
         max_price   = parse_decimal(max_price_text)
         min_price   = parse_decimal(min_price_text)
         close_price = parse_decimal(close_price_text)
-        quantity    = quantity_text.nil? ? nil : quantity_text.gsub(/\D/, '').to_i
+        quantity    = quantity_text.nil? ? 0 : quantity_text.gsub(/\D/, '').to_i
 
-        stock = Stock.find_or_create_by(stock_name: stock_name)
-        StockDatum.create(
+        puts "Price: #{price}, Change: #{change}, Quantity: #{quantity}"
+        next unless price  
+
+        stock = Stock.find_or_create_by!(stock_name: stock_name)
+        stock_datum = StockDatum.create!(
           stock_id: stock.id,
+          stock_country_id: country.id,
           last_price_deal: price,
           changed_price: change,
           first_price: first_price,
           max_price: max_price,
           min_price: min_price,
-          close_price: close_price,
+          close_price: close_price || price,
           quantity_selled: quantity,
           time_update: Time.now
         )
@@ -98,9 +117,14 @@ module StockParser
           max_price: max_price,
           min_price: min_price,
           close_price: close_price,
-          quantity: quantity
+          quantity: quantity,
+          country: country_name
         }
       rescue Selenium::WebDriver::Error::NoSuchElementError
+        puts "Ошибка Selenium для строки"
+        next
+      rescue ActiveRecord::RecordInvalid => e
+        puts "Ошибка записи данных: #{e.message}"
         next
       end
     end
@@ -110,23 +134,41 @@ module StockParser
 
   def self.run
     options = Selenium::WebDriver::Chrome::Options.new
-    options.add_argument('--headless')
+    # options.add_argument('--headless')  
+    options.add_argument('--no-proxy-server') 
+    options.add_argument('--proxy-bypass-list=')
+    options.add_argument('--remote-allow-origins=')
     options.add_argument('--disable-gpu')
+    options.add_argument('--disable-blink-features=AutomationControlled')
     options.add_argument('--no-sandbox')
     options.add_argument('--window-size=1920,1080')
     options.add_argument('--disable-software-rasterizer')
     options.add_argument('--disable-dev-shm-usage')
 
     driver = Selenium::WebDriver.for :chrome, options: options
-    driver.navigate.to 'https://www.finam.ru/quotes/stocks/russia/'
+    all_stocks_data = []
 
-    wait = Selenium::WebDriver::Wait.new(timeout: 20)
+    STOCK_URLS.each do |url, country_name|
+      puts "Парсинг URL: #{url} (Страна: #{country_name})"
+      begin
+        driver.navigate.to url
+        wait = Selenium::WebDriver::Wait.new(timeout: 20)
 
-    load_all_rows(driver)
-    stocks_data = parse_stocks(driver)
+        load_all_rows(driver)
+        stocks_data = parse_stocks(driver, country_name)
+        all_stocks_data.concat(stocks_data)
+
+        puts "Данные с #{url}:"
+        puts stocks_data.inspect
+      rescue StandardError => e
+        puts "Ошибка при парсинге #{url}: #{e.message}"
+        next
+      end
+    end
+
     driver.quit
-
-    puts "Полученные данные:"
-    puts stocks_data.inspect
+    puts "Все полученные данные:"
+    puts all_stocks_data.inspect
+    all_stocks_data
   end
 end

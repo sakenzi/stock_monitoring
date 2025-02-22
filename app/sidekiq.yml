@@ -3,6 +3,6 @@
   :url: redis://localhost:6379/0
 :schedule:
   parser_job:
-    cron: "*/10 * * * *"
+    cron: "*/20 * * * *"
     class: "ParserWorker"
     queue: default

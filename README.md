@@ -6,4 +6,4 @@ bundle exec rackup config.ru - запуск sinatra
 
 172.27.203.99
 
-bundle exec rake db:create - migrate
+rake db:create - migrate

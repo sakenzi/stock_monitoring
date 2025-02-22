@@ -2,6 +2,7 @@ require_relative '../routes/stock_controller'
 
 class StockDatum < ActiveRecord::Base
   belongs_to :stock
+  belongs_to :stock_country  
   after_create_commit :broadcast_stock_update
 
   private
