@@ -32,6 +32,25 @@ class StockController < Sinatra::Base
     json stocks: stocks_data, page: page
   end
 
+  get '/stocks/:id' do
+    stock = Stock.find_by(id: params[:id])
+    if stock
+      latest_data = stock.stock_data.order(time_update: :desc).first
+      if latest_data
+        response = {
+          stock_name: stock.stock_name,
+          stock_id: stock.id,
+          data: latest_data.attributes
+        }
+        json response
+      else
+        halt 404, json({ error: "Данные для акции не найдены" })
+      end
+    else
+      halt 404, json({ error: "Акция не найдена" })
+    end
+  end
+  
   get '/websocket' do
     halt 400, "Используйте WebSocket-соединение на ws://localhost:3001"
   end
@@ -41,10 +60,27 @@ class StockController < Sinatra::Base
   end
 
   def self.notify_new_stock_data(stock_datum)
+    stock = Stock.find_by(id: stock_datum.stock_id)
+    stock_name = stock&.stock_name || "Unknown Stock" 
+
     data = {
       type: "new_stock_data",
+      stock_name: stock_name,  
       stock_id: stock_datum.stock_id,
-      data: stock_datum.attributes
+      data: {
+        id: stock_datum.id,
+        stock_id: stock_datum.stock_id,
+        last_price_deal: stock_datum.last_price_deal,
+        changed_price: stock_datum.changed_price,
+        first_price: stock_datum.first_price,
+        max_price: stock_datum.max_price,
+        min_price: stock_datum.min_price,
+        close_price: stock_datum.close_price,
+        quantity_selled: stock_datum.quantity_selled,
+        time_update: stock_datum.time_update.iso8601,
+        created_at: stock_datum.created_at.iso8601,
+        updated_at: stock_datum.updated_at.iso8601
+      }
     }
     puts "Количество подключённых клиентов: #{settings.sockets.size}"
     settings.sockets.each do |socket|
